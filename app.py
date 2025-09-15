@@ -33,21 +33,23 @@ if dataset_source == "Upload CSV":
 elif dataset_source == "OpenML":
     st.sidebar.caption("Search and pick an OpenML dataset with a short description.")
     datasets_df = list_openml_datasets(limit=300)
-    options = [f"{row.did} — {row.description}" for _, row in datasets_df.iterrows()] if not datasets_df.empty else []
-    selected = st.sidebar.selectbox("OpenML dataset (ID — description)", options)
-    if selected:
-        openml_id = selected.split(" — ")[0]
-        if st.sidebar.button("Load from OpenML"):
+    options = [f"{int(row.did)} — {row.description}" for _, row in datasets_df.iterrows()] if not datasets_df.empty else []
+    selected = st.sidebar.selectbox("OpenML dataset (ID — description)", options, index=0 if options else None)
+    manual_id = st.sidebar.text_input("Or enter an OpenML dataset ID", value="" if options else "61")
+    if st.sidebar.button("Load from OpenML"):
+        openml_id = (selected.split(" — ")[0] if selected else manual_id).strip()
+        if openml_id:
             df = load_openml_dataset(openml_id)
 
 elif dataset_source == "Hugging Face":
     st.sidebar.caption("Browse popular Hugging Face datasets.")
     hf_df = list_huggingface_datasets(limit=200)
     options = [f"{row.name} — {row.description}" for _, row in hf_df.iterrows()] if not hf_df.empty else []
-    selected = st.sidebar.selectbox("Hugging Face dataset (name — description)", options)
-    if selected:
-        hf_name = selected.split(" — ")[0]
-        if st.sidebar.button("Load from Hugging Face"):
+    selected = st.sidebar.selectbox("Hugging Face dataset (name — description)", options, index=0 if options else None)
+    manual_name = st.sidebar.text_input("Or enter a dataset name (e.g., imdb)", value="" if options else "imdb")
+    if st.sidebar.button("Load from Hugging Face"):
+        hf_name = (selected.split(" — ")[0] if selected else manual_name).strip()
+        if hf_name:
             df = load_huggingface_dataset(hf_name)
 
 if df is not None and not df.empty and "error" not in df.columns:

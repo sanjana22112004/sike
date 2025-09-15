@@ -11,7 +11,6 @@ _OPENML_COLUMNS = [
     "NumberOfClasses",
     "version",
     "status",
-    "format",
 ]
 
 def load_openml_dataset(dataset_id):
@@ -34,20 +33,43 @@ def load_huggingface_dataset(name):
         return pd.DataFrame({"error": [str(e)]})
 
 
+def _openml_defaults():
+    return pd.DataFrame([
+        {"did": 61, "name": "iris", "description": "Iris • 150 rows, 5 cols, classes: 3"},
+        {"did": 37, "name": "diabetes", "description": "Diabetes • 442 rows, 11 cols, regression"},
+        {"did": 24, "name": "mushroom", "description": "Mushroom • 8124 rows, 23 cols, classes: 2"},
+        {"did": 40945, "name": "adult", "description": "Adult Income • 48842 rows, 15 cols, classes: 2"},
+    ])
+
+
 def list_openml_datasets(limit=300):
     try:
         df = openml.datasets.list_datasets(output_format="dataframe")
-        # Keep common fields and sort by instances desc
-        df = df[_OPENML_COLUMNS + ["tag"]].copy()
-        df = df.sort_values("NumberOfInstances", ascending=False).head(limit)
-        # Build description
+        keep = [c for c in _OPENML_COLUMNS if c in df.columns]
+        df = df[keep].copy()
+        if "NumberOfInstances" in df.columns:
+            df = df.sort_values("NumberOfInstances", ascending=False)
+        df = df.head(limit)
         def _desc(row):
-            cls = row["NumberOfClasses"] if not pd.isna(row["NumberOfClasses"]) else "?"
-            return f"{row['name']} • {row['NumberOfInstances']} rows, {row['NumberOfFeatures']} cols, classes: {cls}"
+            name = row.get("name", "dataset")
+            n = row.get("NumberOfInstances", "?")
+            p = row.get("NumberOfFeatures", "?")
+            cls = row.get("NumberOfClasses", "?")
+            return f"{name} • {n} rows, {p} cols, classes: {cls}"
         df["description"] = df.apply(_desc, axis=1)
+        if df.empty:
+            return _openml_defaults()
         return df
     except Exception:
-        return pd.DataFrame(columns=["did", "name", "description"]) 
+        return _openml_defaults()
+
+
+def _hf_defaults():
+    return pd.DataFrame([
+        {"id": "imdb", "name": "imdb", "description": "IMDB movie reviews • sentiment classification"},
+        {"id": "ag_news", "name": "ag_news", "description": "AG News • topic classification"},
+        {"id": "banking77", "name": "banking77", "description": "Banking77 • intent classification"},
+    ])
 
 
 def list_huggingface_datasets(limit=300):
@@ -55,15 +77,23 @@ def list_huggingface_datasets(limit=300):
         items = list_datasets(full=True, limit=limit)
         records = []
         for it in items:
-            # description may be long; truncate
-            desc = (it.cardData.get("short_description") if getattr(it, "cardData", None) else None) or (it.description or "")
+            desc = ""
+            try:
+                if getattr(it, "cardData", None) and isinstance(it.cardData, dict):
+                    desc = it.cardData.get("short_description") or it.cardData.get("summary") or ""
+            except Exception:
+                pass
+            desc = desc or (getattr(it, "description", None) or "")
             if desc and len(desc) > 140:
                 desc = desc[:137] + "..."
             records.append({
-                "id": it.id,
-                "name": it.id,
-                "description": desc or "",
+                "id": getattr(it, "id", ""),
+                "name": getattr(it, "id", ""),
+                "description": desc,
             })
-        return pd.DataFrame.from_records(records)
+        df = pd.DataFrame.from_records(records)
+        if df.empty:
+            return _hf_defaults()
+        return df
     except Exception:
-        return pd.DataFrame(columns=["id", "name", "description"]) 
+        return _hf_defaults() 
